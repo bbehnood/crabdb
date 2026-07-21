@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use crabdb::{db::Database, run};
@@ -6,7 +6,7 @@ use crabdb::{db::Database, run};
 const LOG_FILE: &str = "db.log";
 
 fn main() -> Result<()> {
-    let db = Database::open(Path::new(LOG_FILE))?;
+    let db = Database::open(PathBuf::from(LOG_FILE))?;
     run(db)?;
 
     Ok(())

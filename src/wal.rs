@@ -1,22 +1,23 @@
 use std::{
     fs::{File, OpenOptions},
     io::{self, BufRead, BufReader, Write},
-    path::Path,
+    path::PathBuf,
 };
 
 pub struct Wal {
+    path: PathBuf,
     file: File,
 }
 
 impl Wal {
-    pub fn open(path: &Path) -> io::Result<Self> {
+    pub fn open(path: PathBuf) -> io::Result<Self> {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
             .read(true)
-            .open(path)?;
+            .open(&path)?;
 
-        Ok(Self { file })
+        Ok(Self { path, file })
     }
 
     pub fn replay(
@@ -51,6 +52,36 @@ impl Wal {
         Ok(())
     }
 
+    pub fn compact<'a>(
+        &mut self,
+        entries: impl Iterator<Item = (&'a str, &'a str)>,
+    ) -> io::Result<()> {
+        let temp = self.path.with_extension("compact");
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&temp)?;
+
+        for (key, value) in entries {
+            writeln!(file, "SET\t{key}\t{value}")?;
+        }
+
+        file.sync_all()?;
+        drop(file);
+
+        std::fs::rename(&temp, &self.path)?;
+
+        self.file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(&self.path)?;
+
+        Ok(())
+    }
+
     pub fn append_set(&mut self, key: &str, value: &str) -> io::Result<()> {
         writeln!(self.file, "SET\t{key}\t{value}")?;
         self.file.sync_data()
@@ -59,6 +90,10 @@ impl Wal {
     pub fn append_del(&mut self, key: &str) -> io::Result<()> {
         writeln!(self.file, "DEL\t{key}")?;
         self.file.sync_data()
+    }
+
+    pub fn file_size(&self) -> io::Result<u64> {
+        Ok(self.file.metadata()?.len())
     }
 }
 

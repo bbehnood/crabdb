@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     io::{self},
-    path::Path,
+    path::PathBuf,
 };
 
 use thiserror::Error;
@@ -23,7 +23,7 @@ pub enum DatabaseError {
 }
 
 impl Database {
-    pub fn open(path: &Path) -> Result<Self, DatabaseError> {
+    pub fn open(path: PathBuf) -> Result<Self, DatabaseError> {
         let mut wal = Wal::open(path)?;
         let mut data = HashMap::new();
 
@@ -46,6 +46,8 @@ impl Database {
     ) -> Result<(), DatabaseError> {
         self.wal.append_set(&key, &value)?;
         self.data.insert(key, value);
+
+        self.check_compaction()?;
         Ok(())
     }
 
@@ -62,6 +64,20 @@ impl Database {
         }
         self.wal.append_del(key)?;
         self.data.remove(key);
+
+        self.check_compaction()?;
+        Ok(())
+    }
+
+    fn check_compaction(&mut self) -> io::Result<()> {
+        let size = self.wal.file_size()?;
+
+        if size > 16 * 1024 * 1024 {
+            self.wal.compact(
+                self.data.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+            )?;
+        }
+
         Ok(())
     }
 }
