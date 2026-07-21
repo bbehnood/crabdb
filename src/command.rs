@@ -18,6 +18,9 @@ pub enum ParseError {
     #[error("error: missing value\n\nUsage: {0}")]
     MissingValue(&'static str),
 
+    #[error("error: extra argument '{0}'")]
+    ExtraArgument(String),
+
     #[error("error: unknown command '{0}'")]
     UnknownCommand(String),
 }
@@ -48,6 +51,10 @@ pub fn parse(input: &str) -> Result<Command, ParseError> {
                     return Err(ParseError::MissingKey(GET_COMMAND_USAGE));
                 };
 
+                if let Some(arg) = parts.next() {
+                    return Err(ParseError::ExtraArgument(arg.to_owned()));
+                }
+
                 Ok(Command::Get(key.to_owned()))
             }
 
@@ -55,6 +62,10 @@ pub fn parse(input: &str) -> Result<Command, ParseError> {
                 let Some(key) = parts.next() else {
                     return Err(ParseError::MissingKey(DELETE_COMMAND_USAGE));
                 };
+
+                if let Some(arg) = parts.next() {
+                    return Err(ParseError::ExtraArgument(arg.to_owned()));
+                }
 
                 Ok(Command::Delete(key.to_owned()))
             }
