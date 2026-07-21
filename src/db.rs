@@ -1,15 +1,16 @@
 use std::{
     collections::HashMap,
-    fs::{File, OpenOptions},
-    io::{self, BufRead, BufReader, Write},
+    io::{self},
     path::Path,
 };
 
 use thiserror::Error;
 
+use crate::wal::{Wal, WalEntry};
+
 pub struct Database {
     data: HashMap<String, String>,
-    log: File,
+    wal: Wal,
 }
 
 #[derive(Debug, Error)]
@@ -23,42 +24,19 @@ pub enum DatabaseError {
 
 impl Database {
     pub fn open(path: &Path) -> Result<Self, DatabaseError> {
+        let mut wal = Wal::open(path)?;
         let mut data = HashMap::new();
 
-        if path.exists() {
-            let file = File::open(path)?;
-            for line in BufReader::new(file).lines() {
-                let line = line?;
-                let mut parts = line.splitn(3, '\t');
-
-                match parts.next() {
-                    Some("SET") => {
-                        let (Some(key), Some(value)) =
-                            (parts.next(), parts.next())
-                        else {
-                            break;
-                        };
-
-                        data.insert(key.to_owned(), value.to_owned());
-                    }
-
-                    Some("DEL") => {
-                        let Some(key) = parts.next() else {
-                            break;
-                        };
-
-                        data.remove(key)
-                            .ok_or(DatabaseError::InvalidKey(key.to_owned()))?;
-                    }
-
-                    _ => {}
-                }
+        wal.replay(|entry| match entry {
+            WalEntry::Set(k, v) => {
+                data.insert(k, v);
             }
-        }
+            WalEntry::Del(k) => {
+                data.remove(&k);
+            }
+        })?;
 
-        let log = OpenOptions::new().create(true).append(true).open(path)?;
-
-        Ok(Self { data, log })
+        Ok(Self { data, wal })
     }
 
     pub fn set(
@@ -66,10 +44,8 @@ impl Database {
         key: String,
         value: String,
     ) -> Result<(), DatabaseError> {
-        writeln!(self.log, "SET\t{key}\t{value}")?;
-        self.log.flush()?;
+        self.wal.append_set(&key, &value)?;
         self.data.insert(key, value);
-
         Ok(())
     }
 
@@ -84,11 +60,8 @@ impl Database {
         if !self.data.contains_key(key) {
             return Err(DatabaseError::InvalidKey(key.to_owned()));
         }
-
-        writeln!(self.log, "DEL\t{key}")?;
-        self.log.flush()?;
+        self.wal.append_del(key)?;
         self.data.remove(key);
-
         Ok(())
     }
 }

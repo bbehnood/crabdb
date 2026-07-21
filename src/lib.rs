@@ -7,6 +7,7 @@ use crate::{
 
 pub mod command;
 pub mod db;
+pub mod wal;
 
 pub fn run(mut db: Database) -> io::Result<()> {
     println!("=== CrabDB ===");
