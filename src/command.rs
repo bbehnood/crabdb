@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::db::Database;
+use crate::db::{Database, DatabaseError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
@@ -20,12 +20,6 @@ pub enum ParseError {
 
     #[error("error: unknown command '{0}'")]
     UnknownCommand(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Error)]
-pub enum ExecError {
-    #[error("error: no value found for key '{0}'")]
-    InvalidKey(String),
 }
 
 const SET_COMMAND_USAGE: &str = "SET <key> <value>";
@@ -78,23 +72,18 @@ pub fn parse(input: &str) -> Result<Command, ParseError> {
     }
 }
 
-pub fn execute(db: &mut Database, cmd: Command) -> Result<&str, ExecError> {
+pub fn execute(db: &mut Database, cmd: Command) -> Result<&str, DatabaseError> {
     match cmd {
         Command::Set(key, value) => {
-            db.set(key, value);
+            db.set(key, value)?;
             Ok("OK")
         }
 
-        Command::Get(key) => {
-            db.get(&key).ok_or(ExecError::InvalidKey(key.to_string()))
-        }
+        Command::Get(key) => Ok(db.get(&key)?),
 
         Command::Delete(key) => {
-            if db.delete(&key) {
-                Ok("OK")
-            } else {
-                Err(ExecError::InvalidKey(key.to_string()))
-            }
+            db.delete(&key)?;
+            Ok("OK")
         }
 
         Command::Exit => {
