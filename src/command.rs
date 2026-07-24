@@ -5,7 +5,6 @@ pub enum Command {
     Set(String, String),
     Get(String),
     Delete(String),
-    Exit,
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]
@@ -79,12 +78,6 @@ pub fn parse(input: &str) -> Result<Command, ParseError> {
             }
 
             Ok(Command::Delete(key.to_owned()))
-        }
-
-        c if c.eq_ignore_ascii_case("EXIT")
-            || c.eq_ignore_ascii_case("QUIT") =>
-        {
-            Ok(Command::Exit)
         }
 
         cmd => Err(ParseError::UnknownCommand(cmd.to_owned())),
@@ -169,13 +162,6 @@ mod tests {
             parse("DELETE key extra"),
             Err(ParseError::ExtraArgument(_))
         ));
-    }
-
-    #[test]
-    fn exit_and_quit_are_case_insensitive() {
-        for input in ["EXIT", "exit", "Exit", "QUIT", "quit"] {
-            assert_eq!(parse(input).unwrap(), Command::Exit);
-        }
     }
 
     #[test]

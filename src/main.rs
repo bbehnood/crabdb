@@ -5,9 +5,10 @@ use crabdb::{db::Database, run};
 
 const LOG_FILE: &str = "db.log";
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let db = Database::open(PathBuf::from(LOG_FILE))?;
-    run(db)?;
+    run(db).await?;
 
     Ok(())
 }
