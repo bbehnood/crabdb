@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
     io::{self},
     path::PathBuf,
@@ -25,6 +26,12 @@ pub enum DatabaseError {
     Io(#[from] io::Error),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Output<'a> {
+    Message(Cow<'a, str>),
+    Exit,
+}
+
 impl Database {
     pub fn open(path: PathBuf) -> Result<Self, DatabaseError> {
         let mut wal = Wal::open(path)?;
@@ -42,23 +49,27 @@ impl Database {
         Ok(Self { data, wal })
     }
 
-    pub fn execute(&mut self, cmd: Command) -> Result<String, DatabaseError> {
+    pub fn execute(
+        &mut self,
+        cmd: Command,
+    ) -> Result<Output<'_>, DatabaseError> {
         match cmd {
             Command::Set(key, value) => {
                 self.set(key, value)?;
-                Ok("OK".to_owned())
+                Ok(Output::Message(Cow::Borrowed("OK")))
             }
 
-            Command::Get(key) => Ok(format!("VALUE {}", self.get(&key)?)),
+            Command::Get(key) => Ok(Output::Message(Cow::Owned(format!(
+                "VALUE {}",
+                self.get(&key)?
+            )))),
 
             Command::Delete(key) => {
                 self.delete(&key)?;
-                Ok("OK".to_owned())
+                Ok(Output::Message(Cow::Borrowed("OK")))
             }
 
-            Command::Exit => {
-                std::process::exit(0);
-            }
+            Command::Exit => Ok(Output::Exit),
         }
     }
 
