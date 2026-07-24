@@ -6,7 +6,10 @@ use std::{
 
 use thiserror::Error;
 
-use crate::wal::{Wal, WalEntry};
+use crate::{
+    command::Command,
+    wal::{Wal, WalEntry},
+};
 
 pub struct Database {
     data: HashMap<String, String>,
@@ -39,11 +42,27 @@ impl Database {
         Ok(Self { data, wal })
     }
 
-    pub fn set(
-        &mut self,
-        key: String,
-        value: String,
-    ) -> Result<(), DatabaseError> {
+    pub fn execute(&mut self, cmd: Command) -> Result<String, DatabaseError> {
+        match cmd {
+            Command::Set(key, value) => {
+                self.set(key, value)?;
+                Ok("OK".to_owned())
+            }
+
+            Command::Get(key) => Ok(format!("VALUE {}", self.get(&key)?)),
+
+            Command::Delete(key) => {
+                self.delete(&key)?;
+                Ok("OK".to_owned())
+            }
+
+            Command::Exit => {
+                std::process::exit(0);
+            }
+        }
+    }
+
+    fn set(&mut self, key: String, value: String) -> Result<(), DatabaseError> {
         self.wal.append_set(&key, &value)?;
         self.data.insert(key, value);
 
@@ -51,14 +70,14 @@ impl Database {
         Ok(())
     }
 
-    pub fn get(&self, key: &str) -> Result<&str, DatabaseError> {
+    fn get(&self, key: &str) -> Result<&str, DatabaseError> {
         self.data
             .get(key)
             .map(String::as_str)
             .ok_or(DatabaseError::InvalidKey(key.to_owned()))
     }
 
-    pub fn delete(&mut self, key: &str) -> Result<(), DatabaseError> {
+    fn delete(&mut self, key: &str) -> Result<(), DatabaseError> {
         if !self.data.contains_key(key) {
             return Err(DatabaseError::InvalidKey(key.to_owned()));
         }

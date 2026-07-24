@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use crate::db::{Database, DatabaseError};
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Set(String, String),
@@ -80,25 +78,5 @@ pub fn parse(input: &str) -> Result<Command, ParseError> {
         },
 
         None => unreachable!("Empty commands don't reach parsing."),
-    }
-}
-
-pub fn execute(db: &mut Database, cmd: Command) -> Result<&str, DatabaseError> {
-    match cmd {
-        Command::Set(key, value) => {
-            db.set(key, value)?;
-            Ok("OK")
-        }
-
-        Command::Get(key) => Ok(db.get(&key)?),
-
-        Command::Delete(key) => {
-            db.delete(&key)?;
-            Ok("OK")
-        }
-
-        Command::Exit => {
-            std::process::exit(0);
-        }
     }
 }

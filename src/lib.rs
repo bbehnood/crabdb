@@ -1,9 +1,6 @@
 use std::io::{self, Write};
 
-use crate::{
-    command::{execute, parse},
-    db::Database,
-};
+use crate::db::Database;
 
 pub mod command;
 pub mod db;
@@ -34,7 +31,7 @@ pub fn run(mut db: Database) -> io::Result<()> {
             continue;
         }
 
-        let cmd = match parse(input) {
+        let cmd = match command::parse(input) {
             Ok(cmd) => cmd,
             Err(err) => {
                 eprintln!("{err}");
@@ -42,7 +39,7 @@ pub fn run(mut db: Database) -> io::Result<()> {
             }
         };
 
-        match execute(&mut db, cmd) {
+        match db.execute(cmd) {
             Ok(result) => println!("{result}"),
             Err(err) => eprintln!("{err}"),
         }
