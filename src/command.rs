@@ -90,3 +90,107 @@ pub fn parse(input: &str) -> Result<Command, ParseError> {
         cmd => Err(ParseError::UnknownCommand(cmd.to_owned())),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_set_with_single_space() {
+        assert_eq!(
+            parse("SET key value").unwrap(),
+            Command::Set("key".to_owned(), "value".to_owned())
+        );
+    }
+
+    #[test]
+    fn set_with_repeated_spaces_does_not_leak_into_value() {
+        // Regression test: `splitn` used to leave a leading space stuck to
+        // the front of the value whenever there was more than one space
+        // between key and value.
+        assert_eq!(
+            parse("SET key  value").unwrap(),
+            Command::Set("key".to_owned(), "value".to_owned())
+        );
+
+        assert_eq!(
+            parse("SET   key    value").unwrap(),
+            Command::Set("key".to_owned(), "value".to_owned())
+        );
+    }
+
+    #[test]
+    fn set_value_may_contain_internal_spaces() {
+        assert_eq!(
+            parse("SET key hello world").unwrap(),
+            Command::Set("key".to_owned(), "hello world".to_owned())
+        );
+    }
+
+    #[test]
+    fn set_missing_value_is_an_error() {
+        assert!(matches!(parse("SET key"), Err(ParseError::MissingValue(_))));
+    }
+
+    #[test]
+    fn set_missing_key_is_an_error() {
+        assert!(matches!(parse("SET"), Err(ParseError::MissingKey(_))));
+    }
+
+    #[test]
+    fn parses_get() {
+        assert_eq!(parse("GET key").unwrap(), Command::Get("key".to_owned()));
+    }
+
+    #[test]
+    fn get_missing_key_is_an_error() {
+        assert!(matches!(parse("GET"), Err(ParseError::MissingKey(_))));
+    }
+
+    #[test]
+    fn get_with_extra_argument_is_an_error() {
+        assert!(matches!(
+            parse("GET key extra"),
+            Err(ParseError::ExtraArgument(_))
+        ));
+    }
+
+    #[test]
+    fn parses_delete() {
+        assert_eq!(
+            parse("DELETE key").unwrap(),
+            Command::Delete("key".to_owned())
+        );
+    }
+
+    #[test]
+    fn delete_with_extra_argument_is_an_error() {
+        assert!(matches!(
+            parse("DELETE key extra"),
+            Err(ParseError::ExtraArgument(_))
+        ));
+    }
+
+    #[test]
+    fn exit_and_quit_are_case_insensitive() {
+        for input in ["EXIT", "exit", "Exit", "QUIT", "quit"] {
+            assert_eq!(parse(input).unwrap(), Command::Exit);
+        }
+    }
+
+    #[test]
+    fn command_names_are_case_insensitive() {
+        assert_eq!(
+            parse("set key value").unwrap(),
+            Command::Set("key".to_owned(), "value".to_owned())
+        );
+    }
+
+    #[test]
+    fn unknown_command_is_an_error() {
+        assert!(matches!(
+            parse("FROB key"),
+            Err(ParseError::UnknownCommand(cmd)) if cmd == "FROB"
+        ));
+    }
+}

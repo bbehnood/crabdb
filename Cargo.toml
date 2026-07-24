@@ -6,3 +6,8 @@ edition = "2024"
 [dependencies]
 anyhow = "1"
 thiserror = "2"
+crc32fast = "1.5"
+fs4 = { version = "1.1", features = ["sync"] }
+
+[dev-dependencies]
+tempfile = "3.27"

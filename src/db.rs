@@ -111,3 +111,83 @@ impl Database {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_path() -> PathBuf {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("db.log");
+        // Leak the TempDir so the directory sticks around for the test;
+        // the OS reclaims it regardless once the process exits.
+        std::mem::forget(dir);
+        path
+    }
+
+    #[test]
+    fn set_then_get_round_trips() {
+        let mut db = Database::open(temp_path()).expect("open");
+        db.execute(Command::Set("key".to_owned(), "value".to_owned()))
+            .expect("set");
+
+        assert_eq!(
+            db.execute(Command::Get("key".to_owned())).unwrap(),
+            Output::Message(Cow::Borrowed("VALUE value"))
+        );
+    }
+
+    #[test]
+    fn get_missing_key_is_an_error() {
+        let mut db = Database::open(temp_path()).expect("open");
+        let err = db.execute(Command::Get("nope".to_owned())).unwrap_err();
+        assert!(matches!(err, DatabaseError::InvalidKey(k) if k == "nope"));
+    }
+
+    #[test]
+    fn delete_removes_key() {
+        let mut db = Database::open(temp_path()).expect("open");
+        db.execute(Command::Set("key".to_owned(), "value".to_owned()))
+            .expect("set");
+        db.execute(Command::Delete("key".to_owned())).expect("delete");
+
+        let err = db.execute(Command::Get("key".to_owned())).unwrap_err();
+        assert!(matches!(err, DatabaseError::InvalidKey(_)));
+    }
+
+    #[test]
+    fn delete_missing_key_is_an_error() {
+        let mut db = Database::open(temp_path()).expect("open");
+        let err = db.execute(Command::Delete("nope".to_owned())).unwrap_err();
+        assert!(matches!(err, DatabaseError::InvalidKey(k) if k == "nope"));
+    }
+
+    #[test]
+    fn exit_returns_output_exit_without_terminating_the_process() {
+        let mut db = Database::open(temp_path()).expect("open");
+        assert_eq!(db.execute(Command::Exit).unwrap(), Output::Exit);
+    }
+
+    #[test]
+    fn data_survives_reopen() {
+        let path = temp_path();
+
+        let mut db = Database::open(path.clone()).expect("open");
+        db.execute(Command::Set("a".to_owned(), "1".to_owned()))
+            .expect("set a");
+        db.execute(Command::Set("b".to_owned(), "2".to_owned()))
+            .expect("set b");
+        db.execute(Command::Delete("a".to_owned())).expect("delete a");
+        drop(db);
+
+        let mut db = Database::open(path).expect("reopen");
+        assert!(matches!(
+            db.execute(Command::Get("a".to_owned())),
+            Err(DatabaseError::InvalidKey(_))
+        ));
+        assert_eq!(
+            db.execute(Command::Get("b".to_owned())).unwrap(),
+            Output::Message(Cow::Borrowed("VALUE 2"))
+        );
+    }
+}
