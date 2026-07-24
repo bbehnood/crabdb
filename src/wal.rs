@@ -108,32 +108,42 @@ impl TryFrom<u8> for RecordType {
     }
 }
 
+fn try_read_exact<R: Read>(reader: &mut R, buf: &mut [u8]) -> io::Result<bool> {
+    match reader.read_exact(buf) {
+        Ok(()) => Ok(true),
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(err) => Err(err),
+    }
+}
+
 fn read_entry<R: Read>(reader: &mut R) -> io::Result<Option<WalEntry>> {
     let mut record_type = [0; 1];
-    match reader.read_exact(&mut record_type) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
-            return Ok(None);
-        }
-        Err(err) => {
-            return Err(err);
-        }
+    if !try_read_exact(reader, &mut record_type)? {
+        return Ok(None);
     }
 
     let record_type = u8::from_le_bytes(record_type);
     let record_type = RecordType::try_from(record_type)?;
 
-    let key_len = read_u32(reader)?;
+    let Some(key_len) = read_u32(reader)? else {
+        return Ok(None);
+    };
 
     let mut key = vec![0; key_len as usize];
-    reader.read_exact(&mut key)?;
+    if !try_read_exact(reader, &mut key)? {
+        return Ok(None);
+    }
 
     match record_type {
         RecordType::Set => {
-            let value_len = read_u32(reader)?;
+            let Some(value_len) = read_u32(reader)? else {
+                return Ok(None);
+            };
 
             let mut value = vec![0; value_len as usize];
-            reader.read_exact(&mut value)?;
+            if !try_read_exact(reader, &mut value)? {
+                return Ok(None);
+            }
 
             Ok(Some(WalEntry::Set(
                 String::from_utf8(key).map_err(|_| {
@@ -153,10 +163,13 @@ fn read_entry<R: Read>(reader: &mut R) -> io::Result<Option<WalEntry>> {
     }
 }
 
-fn read_u32<R: Read>(reader: &mut R) -> io::Result<u32> {
+fn read_u32<R: Read>(reader: &mut R) -> io::Result<Option<u32>> {
     let mut buf = [0; 4];
-    reader.read_exact(&mut buf)?;
-    Ok(u32::from_le_bytes(buf))
+    if try_read_exact(reader, &mut buf)? {
+        Ok(Some(u32::from_le_bytes(buf)))
+    } else {
+        Ok(None)
+    }
 }
 
 fn write_set<W: Write>(
